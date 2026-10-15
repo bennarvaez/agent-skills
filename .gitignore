@@ -1,0 +1,4 @@
+# Personal, per-machine files
+*.local.md
+*.local.json
+.installed-copy

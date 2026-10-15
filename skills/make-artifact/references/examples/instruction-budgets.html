@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instruction File Budgets</title>
+<script>
+  try {
+    var forced = new URLSearchParams(location.search).get('theme');
+    if (forced === 'dark' || forced === 'light') document.documentElement.dataset.theme = forced;
+  } catch (e) {}
+</script>
+<style>
+  /* Palette: ink, paper, surface, muted, rule, signal (teal, the bars); neutrals lean teal. */
+  :root {
+    color-scheme: light;
+    --paper: #f3f6f7;
+    --surface: #ffffff;
+    --ink: #172126;
+    --muted: #52626a;
+    --rule: #d3dde1;
+    --signal: #0e7490;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    --step--1: 0.875rem; --step-0: 1rem; --step-1: 1.25rem; --step-2: 1.5625rem; --step-3: 1.953rem;
+    --gutter: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #10171a; --surface: #172024; --ink: #e2eaed; --muted: #98aab2; --rule: #2a373d; --signal: #3fb8d6;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #10171a; --surface: #172024; --ink: #e2eaed; --muted: #98aab2; --rule: #2a373d; --signal: #3fb8d6;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: var(--step-0)/1.55 var(--font-body); }
+  main { max-width: 880px; margin: 0 auto; padding: 40px var(--gutter) 64px; }
+  h1, h2 { line-height: 1.2; margin: 1.8em 0 0.5em; }
+  h1 { font-size: var(--step-3); margin-top: 0; }
+  h2 { font-size: var(--step-1); }
+  p { max-width: 68ch; }
+  .lede { font-size: var(--step-1); color: var(--muted); margin-top: 0; }
+  code { font-family: var(--font-mono); font-size: 0.92em; }
+
+  /* Chart: label column + track. The track spans 0-500 lines; gridlines every 100. */
+  .chart { margin: 28px 0 0; padding: 20px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; }
+  .chart figcaption { color: var(--muted); font-size: var(--step--1); margin-bottom: 16px; }
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .row, .axis { display: grid; grid-template-columns: 17rem minmax(0, 1fr); gap: 4px 16px; align-items: center; }
+  .row { margin-bottom: 10px; }
+  .label { font-size: var(--step--1); }
+  .track {
+    position: relative; height: 26px;
+    background: repeating-linear-gradient(to right, var(--rule) 0 1px, transparent 1px 20%);
+    border-right: 1px solid var(--rule);
+  }
+  .bar { height: 100%; background: var(--signal); }
+  .value {
+    position: absolute; top: 50%; transform: translateY(-50%); padding-left: 8px;
+    font-size: var(--step--1); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .ticks { position: relative; height: 1.4em; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ticks span { position: absolute; transform: translateX(-50%); }
+  .ticks span:first-child { transform: none; }
+  .ticks span:last-child { transform: translateX(-100%); }
+  @media (max-width: 640px) {
+    .row, .axis { grid-template-columns: minmax(0, 1fr); }
+    .axis > :first-child { display: none; }
+  }
+
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  .source { color: var(--muted); font-size: var(--step--1); margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>How much room each instruction file gets</h1>
+  <p class="lede">repo-bootstrap caps every instruction file it writes. Even the largest cap, 300 lines for a SKILL.md, is 60% of the 500 lines the Agent Skills spec recommends.</p>
+
+  <figure class="chart">
+    <figcaption>Line budgets from repo-bootstrap's rules, on one scale from 0 to 500 lines, the spec's recommended maximum for a SKILL.md.</figcaption>
+    <ul class="rows" id="rows"></ul>
+    <div class="axis" aria-hidden="true"><span></span><div class="ticks" id="ticks"></div></div>
+  </figure>
+
+  <h2>A SKILL.md gets the most room because it can hand detail off</h2>
+  <p>Anything that would push a SKILL.md past 300 lines moves into <code>references/</code>, which the agent reads only when a step needs it. <code>AGENTS.md</code> is read at the start of every session, so it stays at half that.</p>
+
+  <h2>The smallest files add to AGENTS.md rather than repeat it</h2>
+  <p><code>copilot-instructions.md</code> carries only Copilot-specific notes, and a skill that runs only when called as <code>/name</code> is a single task. Both get 40 lines.</p>
+
+  <h2>The numbers</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th scope="col">File</th><th scope="col" class="num">Budget (lines)</th><th scope="col" class="num">Share of 500</th></tr></thead>
+      <tbody id="table"></tbody>
+    </table>
+  </div>
+
+  <p class="source">Source: rule 6, "Stay lean", in <code>skills/repo-bootstrap/SKILL.md</code>. The 500-line recommendation is from the Agent Skills specification at agentskills.io.</p>
+</main>
+
+<script>
+  const SCALE_MAX = 500; // the spec's recommended SKILL.md maximum
+  const BUDGETS = [
+    { file: 'Each SKILL.md', lines: 300 },
+    { file: 'AGENTS.md', lines: 150 },
+    { file: 'Each agent', lines: 80 },
+    { file: 'Each rule', lines: 60 },
+    { file: 'copilot-instructions.md', lines: 40 },
+    { file: 'Each skill run only as /name', lines: 40 },
+  ];
+
+  const pct = (n) => (n / SCALE_MAX) * 100;
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  document.getElementById('rows').innerHTML = BUDGETS.map((b) =>
+    '<li class="row"><span class="label">' + esc(b.file) + '</span>' +
+    '<div class="track"><div class="bar" style="width:' + pct(b.lines) + '%"></div>' +
+    '<span class="value" style="left:' + pct(b.lines) + '%">' + b.lines + ' lines</span></div></li>'
+  ).join('');
+
+  const ticks = [];
+  for (let n = 0; n <= SCALE_MAX; n += 100) ticks.push('<span style="left:' + pct(n) + '%">' + n + '</span>');
+  document.getElementById('ticks').innerHTML = ticks.join('');
+
+  document.getElementById('table').innerHTML = BUDGETS.map((b) =>
+    '<tr><td>' + esc(b.file) + '</td><td class="num">' + b.lines + '</td><td class="num">' + Math.round(pct(b.lines)) + '%</td></tr>'
+  ).join('');
+</script>
+</body>
+</html>
